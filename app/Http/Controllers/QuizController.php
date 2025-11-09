@@ -8,7 +8,10 @@ use App\Jobs\ProcessQuizAnalysisJob;
 use App\Models\Quiz;
 use App\Models\QuizAiAnalysis;
 use App\Models\QuizInvitation;
+use App\Models\User;
 use App\Services\QuizAnalyticsService;
+use ArielMejiaDev\LarapexCharts\BarChart;
+use ArielMejiaDev\LarapexCharts\DonutChart;
 use Barryvdh\DomPDF\Facade\Pdf;
 use Illuminate\Contracts\View\View;
 use Illuminate\Http\RedirectResponse;
@@ -24,7 +27,7 @@ class QuizController extends Controller
 
         $quizzes = Quiz::query()
             ->when(
-                $user->role !== $user::ROLE_ADMIN,
+                $user->role !== User::ROLE_ADMIN,
                 fn ($query) => $query->where('user_id', $user->id)
             )
             ->latest()
@@ -212,7 +215,7 @@ class QuizController extends Controller
             'analysisSummary' => $analysisSummary,
             'quantitativeInsights' => $quantitativeInsights,
             'qualitativeInsights' => $qualitativeInsights,
-            'chartConfigs' => $chartConfigs,
+            'analysisCharts' => $this->buildAnalysisCharts($chartConfigs),
         ]);
     }
 
@@ -276,7 +279,7 @@ class QuizController extends Controller
         $user = Auth::user();
 
         abort_if(
-            $user->role !== $user::ROLE_ADMIN && $quiz->user_id !== $user->id,
+            $user->role !== User::ROLE_ADMIN && $quiz->user_id !== $user->id,
             403,
             'No tienes permisos para acceder a esta encuesta.'
         );
@@ -439,5 +442,52 @@ class QuizController extends Controller
         }
 
         return [];
+    }
+
+    /**
+     * @param array<int, array<string, mixed>> $chartConfigs
+     * @return array<int, array{chart: \ArielMejiaDev\LarapexCharts\LarapexChart, question: string, type: string}>
+     */
+    protected function buildAnalysisCharts(array $chartConfigs): array
+    {
+        $charts = [];
+
+        foreach ($chartConfigs as $config) {
+            $type = $config['type'] ?? 'bar';
+            $question = $config['question'] ?? __('Gráfico');
+            $labels = $config['labels'] ?? [];
+            $data = $config['data'] ?? [];
+
+            if ($type === 'pie') {
+                $chart = new DonutChart();
+                $chart
+                    ->setTitle($question)
+                    ->setHeight(320)
+                    ->setLabels($labels)
+                    ->setDataset($data)
+                    ->setColors(['#4e73df', '#1cc88a', '#36b9cc', '#f6c23e', '#e74a3b', '#858796']);
+            } else {
+                $chart = new BarChart();
+                $chart
+                    ->setTitle($question)
+                    ->setHeight(320)
+                    ->setXAxis($labels)
+                    ->setDataset([
+                        [
+                            'name' => __('Respuestas'),
+                            'data' => $data,
+                        ],
+                    ])
+                    ->setColors(['#4e73df']);
+            }
+
+            $charts[] = [
+                'chart' => $chart,
+                'question' => $question,
+                'type' => $type,
+            ];
+        }
+
+        return $charts;
     }
 }

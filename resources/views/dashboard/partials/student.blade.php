@@ -50,7 +50,11 @@
             </div>
             <div class="card-body">
                 <div class="chart-area">
-                    <canvas id="usageAreaChart" height="200"></canvas>
+                    @if (! empty($charts['usage']))
+                        {!! $charts['usage']->container() !!}
+                    @else
+                        <p class="text-muted small mb-0">{{ __('Aún no registras actividad en los últimos días.') }}</p>
+                    @endif
                 </div>
                 <p class="text-muted small mt-3 mb-0">{{ __('Cantidad de encuestas que enviaste cada día durante la última semana.') }}</p>
             </div>

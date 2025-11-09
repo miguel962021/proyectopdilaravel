@@ -76,7 +76,11 @@
             </div>
             <div class="card-body">
                 <div class="chart-area">
-                    <canvas id="usageAreaChart" height="220"></canvas>
+                    @if (! empty($charts['usage']))
+                        {!! $charts['usage']->container() !!}
+                    @else
+                        <p class="text-muted small mb-0">{{ __('Aún no hay datos suficientes para este gráfico.') }}</p>
+                    @endif
                 </div>
                 <p class="text-muted small mt-3 mb-0">{{ __('Muestra cuántas respuestas se han registrado día a día durante la última semana en toda la plataforma.') }}</p>
             </div>
@@ -90,7 +94,11 @@
             </div>
             <div class="card-body">
                 <div class="chart-pie pt-4 pb-2">
-                    <canvas id="rolePieChart" height="220"></canvas>
+                    @if (! empty($charts['roles']))
+                        {!! $charts['roles']->container() !!}
+                    @else
+                        <p class="text-muted small mb-0">{{ __('Sin datos para mostrar la distribución de roles.') }}</p>
+                    @endif
                 </div>
                 <div class="mt-4 text-center small">
                     <span class="mr-2"><i class="fas fa-circle text-primary"></i> {{ __('Administradores') }}</span>
@@ -110,7 +118,11 @@
             </div>
             <div class="card-body">
                 <div class="chart-pie pt-4 pb-2">
-                    <canvas id="adminParticipationSources" height="220"></canvas>
+                    @if (! empty($charts['participation']))
+                        {!! $charts['participation']->container() !!}
+                    @else
+                        <p class="text-muted small mb-0">{{ __('Sin datos disponibles para las fuentes de participación.') }}</p>
+                    @endif
                 </div>
                 <div class="mt-4 text-center small">
                     <span class="mr-2"><i class="fas fa-circle text-primary"></i> {{ __('Invitaciones directas') }}</span>

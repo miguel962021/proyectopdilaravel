@@ -6,6 +6,7 @@ use App\Models\Quiz;
 use App\Models\QuizAttempt;
 use App\Models\QuizInvitation;
 use App\Models\User;
+use ArielMejiaDev\LarapexCharts\LarapexChart;
 use Carbon\Carbon;
 use Carbon\CarbonPeriod;
 use Illuminate\Contracts\View\View;
@@ -49,14 +50,42 @@ class DashboardController extends Controller
 
         $recentUsers = User::latest()->take(5)->get();
 
-        $chart = $this->buildAttemptSeries(QuizAttempt::query());
+        $attemptSeries = $this->buildAttemptSeries(QuizAttempt::query());
 
         return view('dashboard', [
             'role' => User::ROLE_ADMIN,
             'stats' => $stats,
             'roleCounts' => $roleCounts,
             'recentUsers' => $recentUsers,
-            'chart' => $chart,
+            'charts' => array_filter([
+                'usage' => $this->buildLineChart(
+                    $attemptSeries,
+                    __('Actividad semanal de respuestas'),
+                    __('Respuestas completadas')
+                ),
+                'roles' => $this->buildDonutChart(
+                    [
+                        __('Administradores'),
+                        __('Docentes'),
+                        __('Estudiantes'),
+                    ],
+                    [
+                        $roleCounts['administrador'] ?? 0,
+                        $roleCounts['docente'] ?? 0,
+                        $roleCounts['estudiante'] ?? 0,
+                    ],
+                    __('Distribución por rol')
+                ),
+                'participation' => $this->buildDonutChart(
+                    [
+                        __('Invitaciones directas'),
+                        __('Docentes compartieron'),
+                        __('Accesos externos'),
+                    ],
+                    [55, 30, 15],
+                    __('Fuentes de participación')
+                ),
+            ]),
         ]);
     }
 
@@ -104,7 +133,7 @@ class DashboardController extends Controller
             ->take(5)
             ->get();
 
-        $chart = $this->buildAttemptSeries(
+        $attemptSeries = $this->buildAttemptSeries(
             QuizAttempt::query()->whereIn('quiz_id', $quizIds)
         );
 
@@ -121,7 +150,26 @@ class DashboardController extends Controller
             'recentSurveys' => $recentSurveys,
             'recentResponses' => $recentResponses,
             'pendingAnalysis' => $pendingAnalysis,
-            'chart' => $chart,
+            'charts' => array_filter([
+                'usage' => $this->buildLineChart(
+                    $attemptSeries,
+                    __('Actividad semanal de mis encuestas'),
+                    __('Respuestas registradas')
+                ),
+                'status' => $this->buildDonutChart(
+                    [
+                        __('Publicadas'),
+                        __('Borradores'),
+                        __('Cerradas'),
+                    ],
+                    [
+                        $publishedCount,
+                        $draftCount,
+                        $closedCount,
+                    ],
+                    __('Estado de tus encuestas')
+                ),
+            ]),
         ]);
     }
 
@@ -146,7 +194,7 @@ class DashboardController extends Controller
             })
             ->count();
 
-        $chart = $this->buildAttemptSeries(
+        $attemptSeries = $this->buildAttemptSeries(
             QuizAttempt::query()->where('user_id', $user->id)
         );
 
@@ -158,7 +206,13 @@ class DashboardController extends Controller
                 'last_activity' => $lastAttemptAt,
             ],
             'recentAttempts' => $recentAttempts,
-            'chart' => $chart,
+            'charts' => array_filter([
+                'usage' => $this->buildLineChart(
+                    $attemptSeries,
+                    __('Mi actividad semanal'),
+                    __('Encuestas completadas')
+                ),
+            ]),
         ]);
     }
 
@@ -184,5 +238,51 @@ class DashboardController extends Controller
             'labels' => $labels,
             'values' => $values,
         ];
+    }
+
+    /**
+     * @param array{labels: array<int, string>, values: array<int, int>} $series
+     */
+    /**
+     * @return \ArielMejiaDev\LarapexCharts\LineChart|null
+     */
+    protected function buildLineChart(array $series, string $title, string $datasetLabel)
+    {
+        if (empty($series['labels'])) {
+            return null;
+        }
+
+        $chart = (new LarapexChart())->lineChart();
+
+        $chart
+            ->setTitle($title)
+            ->setHeight(320)
+            ->setColors(['#4e73df'])
+            ->setMarkers(['#2e59d9'], 7, 10)
+            ->setXAxis($series['labels'])
+            ->addData($datasetLabel, $series['values']);
+
+        return $chart;
+    }
+
+    /**
+     * @return \ArielMejiaDev\LarapexCharts\DonutChart|null
+     */
+    protected function buildDonutChart(array $labels, array $values, string $title)
+    {
+        if (! array_sum($values)) {
+            return null;
+        }
+
+        $chart = (new LarapexChart())->donutChart();
+
+        $chart
+            ->setTitle($title)
+            ->setHeight(320)
+            ->setLabels($labels)
+            ->addData($values)
+            ->setColors(['#4e73df', '#1cc88a', '#36b9cc', '#f6c23e', '#e74a3b', '#858796']);
+
+        return $chart;
     }
 }

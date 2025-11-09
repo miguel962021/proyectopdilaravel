@@ -251,14 +251,9 @@
             $(document).on('submit', 'form.js-show-loader', function () {
                 $('#globalLoaderModal').modal('show');
             });
-
-            $(document).on('click', '.js-show-loader', function () {
-                $('#globalLoaderModal').modal('show');
-            });
         })(jQuery);
     </script>
-    @stack('scripts-before-chart')
-    <script src="{{ asset('vendor/chart.js/Chart.min.js') }}"></script>
+    <script src="{{ \ArielMejiaDev\LarapexCharts\LarapexChart::cdn() }}"></script>
     @stack('scripts')
 </body>
 </html>

@@ -50,17 +50,20 @@
             </div>
         </div>
 
-        @if (! empty($chartConfigs))
+        @if (! empty($analysisCharts))
             <div class="row">
-                @foreach ($chartConfigs as $index => $chart)
+                @foreach ($analysisCharts as $chartEntry)
+                    @php
+                        /** @var \ArielMejiaDev\LarapexCharts\LarapexChart $chart */
+                        $chart = $chartEntry['chart'];
+                    @endphp
                     <div class="col-xl-6 col-lg-6 mb-4">
                         <div class="card shadow h-100">
                             <div class="card-header py-3 d-flex justify-content-between align-items-center">
-                                <h6 class="m-0 font-weight-bold text-primary">{{ $chart['question'] }}</h6>
-                                <span class="badge badge-light text-muted text-uppercase">{{ $chart['type'] === 'pie' ? __('Distribución') : __('Comparativa') }}</span>
+                                <h6 class="m-0 font-weight-bold text-primary">{{ $chartEntry['question'] }}</h6>
                             </div>
                             <div class="card-body">
-                                <canvas id="analysis-chart-{{ $index }}" height="220"></canvas>
+                                {!! $chart->container() !!}
                             </div>
                         </div>
                     </div>
@@ -148,73 +151,9 @@
 </x-app-layout>
 
 @push('scripts')
-@if (! empty($chartConfigs))
-<script>
-    (function () {
-        const chartConfigs = @json($chartConfigs);
-
-        chartConfigs.forEach((config, index) => {
-            const ctx = document.getElementById(`analysis-chart-${index}`);
-            if (!ctx) {
-                return;
-            }
-
-            const baseOptions = {
-                maintainAspectRatio: false,
-                legend: { display: config.type === 'pie' },
-                tooltips: {
-                    backgroundColor: 'rgba(255,255,255,0.95)',
-                    bodyFontColor: '#858796',
-                    borderColor: '#dddfeb',
-                    borderWidth: 1,
-                    xPadding: 15,
-                    yPadding: 15,
-                    displayColors: true,
-                    caretPadding: 10,
-                },
-            };
-
-            const palette = ['#4e73df', '#1cc88a', '#36b9cc', '#f6c23e', '#e74a3b', '#858796'];
-
-            const data = {
-                labels: config.labels,
-                datasets: [{
-                    data: config.data,
-                    backgroundColor: palette,
-                    borderColor: '#ffffff',
-                    borderWidth: 2,
-                }],
-            };
-
-            if (config.type === 'bar') {
-                data.datasets[0].backgroundColor = '#4e73df';
-                data.datasets[0].barThickness = 24;
-                baseOptions.legend.display = false;
-                baseOptions.scales = {
-                    xAxes: [{
-                        gridLines: { display: false },
-                        ticks: { maxRotation: 45, minRotation: 0 },
-                    }],
-                    yAxes: [{
-                        ticks: {
-                            beginAtZero: true,
-                            precision: 0,
-                        },
-                        gridLines: {
-                            color: 'rgb(234, 236, 244)',
-                            zeroLineColor: 'rgb(234, 236, 244)',
-                        },
-                    }],
-                };
-            }
-
-            new Chart(ctx, {
-                type: config.type,
-                data,
-                options: baseOptions,
-            });
-        });
-    })();
-</script>
-@endif
+    @if (! empty($analysisCharts))
+        @foreach ($analysisCharts as $chartEntry)
+            {!! $chartEntry['chart']->script() !!}
+        @endforeach
+    @endif
 @endpush
