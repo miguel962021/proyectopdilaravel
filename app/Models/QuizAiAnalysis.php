@@ -12,36 +12,27 @@ class QuizAiAnalysis extends Model
 
     protected $fillable = [
         'quiz_id',
-        'attempt_id',
-        'type',
-        'model',
+        'status',
         'summary',
-        'payload',
-        'prompt_tokens',
-        'completion_tokens',
-        'total_tokens',
-        'generated_at',
-        'generated_by',
+        'recommendations',
+        'quantitative_insights',
+        'qualitative_themes',
+        'raw_response',
+        'error_message',
+        'started_at',
+        'completed_at',
     ];
 
     protected $casts = [
-        'payload' => 'array',
-        'generated_at' => 'datetime',
+        'quantitative_insights' => 'array',
+        'qualitative_themes' => 'array',
+        'raw_response' => 'array',
+        'started_at' => 'datetime',
+        'completed_at' => 'datetime',
     ];
 
     public function quiz(): BelongsTo
     {
         return $this->belongsTo(Quiz::class);
     }
-
-    public function attempt(): BelongsTo
-    {
-        return $this->belongsTo(QuizAttempt::class);
-    }
-
-    public function author(): BelongsTo
-    {
-        return $this->belongsTo(User::class, 'generated_by');
-    }
 }
-

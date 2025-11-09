@@ -96,6 +96,14 @@
                     <a href="{{ route('quizzes.edit', $quiz) }}" class="btn btn-primary btn-block mb-2">
                         <i class="fas fa-edit mr-1"></i>{{ __('Editar encuesta') }}
                     </a>
+                    @if ($quiz->status === 'closed')
+                        <form method="POST" action="{{ route('quizzes.analyze', $quiz) }}" class="mb-2">
+                            @csrf
+                            <button type="submit" class="btn btn-success btn-block">
+                                <i class="fas fa-robot mr-1"></i>{{ __('Regenerar análisis con IA') }}
+                            </button>
+                        </form>
+                    @endif
                     <a href="{{ route('quizzes.index') }}" class="btn btn-outline-secondary btn-block">
                         <i class="fas fa-arrow-left mr-1"></i>{{ __('Volver al listado') }}
                     </a>
@@ -142,37 +150,105 @@
 
         <div class="col-xl-4 col-lg-5">
             <div class="card shadow mb-4">
-                <div class="card-header py-3">
-                    <h6 class="m-0 font-weight-bold text-primary">{{ __('Insights cualitativos') }}</h6>
+                <div class="card-header py-3 d-flex justify-content-between align-items-center">
+                    <h6 class="m-0 font-weight-bold text-primary">{{ __('Análisis con IA') }}</h6>
+                    @if ($analysisSummary['status'])
+                        @php
+                            $statusClasses = [
+                                'pending' => 'badge-warning',
+                                'processing' => 'badge-info',
+                                'completed' => 'badge-success',
+                                'failed' => 'badge-danger',
+                            ];
+                            $statusTexts = [
+                                'pending' => __('Pendiente'),
+                                'processing' => __('Procesando'),
+                                'completed' => __('Completado'),
+                                'failed' => __('Error'),
+                            ];
+                            $badgeClass = $statusClasses[$analysisSummary['status']] ?? 'badge-secondary';
+                            $badgeText = $statusTexts[$analysisSummary['status']] ?? ucfirst($analysisSummary['status']);
+                        @endphp
+                        <span class="badge {{ $badgeClass }}">{{ $badgeText }}</span>
+                    @endif
                 </div>
                 <div class="card-body">
-                    <p class="text-muted small mb-3">
-                        {{ __('Cuando cierres la encuesta y ejecutes el análisis con IA, aparecerán recomendaciones personalizadas para el curso.') }}
-                    </p>
-                    <ul class="small list-unstyled mb-0 text-muted">
-                        <li><i class="fas fa-check-circle text-success mr-2"></i>{{ __('Identificación de fortalezas y áreas de mejora.') }}</li>
-                        <li><i class="fas fa-lightbulb text-warning mr-2"></i>{{ __('Sugerencias de seguimiento para el docente.') }}</li>
-                        <li><i class="fas fa-chart-line text-primary mr-2"></i>{{ __('Tendencias detectadas en respuestas abiertas.') }}</li>
-                    </ul>
-                </div>
-            </div>
+                    @if ($analysisSummary['status'] === 'completed')
+                        @if ($analysisSummary['completed_at'])
+                            <p class="text-muted small mb-3">
+                                <i class="fas fa-clock mr-1"></i>{{ __('Generado el :date', ['date' => $analysisSummary['completed_at']->format('d/m/Y H:i')]) }}
+                            </p>
+                        @endif
 
-            <div class="card shadow">
-                <div class="card-header py-3">
-                    <h6 class="m-0 font-weight-bold text-primary">{{ __('Próximos pasos sugeridos') }}</h6>
-                </div>
-                <div class="card-body">
-                    <p class="small text-muted mb-3">
-                        {{ __('Cierra la encuesta cuando consideres suficiente la participación para preparar reportes y generar recomendaciones.') }}
-                    </p>
-                    <ul class="small mb-3 text-muted">
-                        <li>{{ __('Verifica la participación por invitación para asegurar cobertura.') }}</li>
-                        <li>{{ __('Analiza diferencias entre tipos de pregunta y ajusta tu próximo instrumento.') }}</li>
-                        <li>{{ __('Solicita el análisis con IA (en desarrollo) para obtener ideas accionables.') }}</li>
-                    </ul>
-                    <a href="{{ route('quizzes.edit', $quiz) }}" class="btn btn-sm btn-outline-primary btn-block">
-                        <i class="fas fa-edit mr-1"></i>{{ __('Gestionar encuesta') }}
-                    </a>
+                        @if ($analysisSummary['summary'])
+                            <p class="font-weight-semibold text-gray-800 mb-3">{{ $analysisSummary['summary'] }}</p>
+                        @endif
+
+                        @if (! empty($analysisSummary['quantitative']))
+                            <h6 class="text-secondary text-uppercase small font-weight-bold">{{ __('Hallazgos cuantitativos') }}</h6>
+                            <ul class="list-unstyled small text-muted mb-3">
+                                @foreach ($analysisSummary['quantitative'] as $finding)
+                                    <li class="mb-2">
+                                        <strong>{{ $finding['question'] }}</strong>
+                                        @if (! empty($finding['key_findings']))
+                                            <ul class="mt-1 mb-0 pl-3">
+                                                @foreach ($finding['key_findings'] as $item)
+                                                    <li>{{ $item }}</li>
+                                                @endforeach
+                                            </ul>
+                                        @endif
+                                    </li>
+                                @endforeach
+                            </ul>
+                        @endif
+
+                        @if (! empty($analysisSummary['qualitative']))
+                            <h6 class="text-secondary text-uppercase small font-weight-bold">{{ __('Temas cualitativos') }}</h6>
+                            <div class="small text-muted mb-3">
+                                @foreach ($analysisSummary['qualitative'] as $theme)
+                                    <div class="mb-2">
+                                        <strong class="d-block">{{ $theme['theme'] }}</strong>
+                                        @if (! empty($theme['evidence']))
+                                            <ul class="pl-3 mb-0 mt-1">
+                                                @foreach ($theme['evidence'] as $quote)
+                                                    <li>“{{ $quote }}”</li>
+                                                @endforeach
+                                            </ul>
+                                        @endif
+                                    </div>
+                                @endforeach
+                            </div>
+                        @endif
+
+                        @if (! empty($analysisSummary['recommendations']))
+                            <h6 class="text-secondary text-uppercase small font-weight-bold">{{ __('Recomendaciones') }}</h6>
+                            <ul class="small text-muted mb-0">
+                                @foreach ($analysisSummary['recommendations'] as $recommendation)
+                                    <li>{{ $recommendation }}</li>
+                                @endforeach
+                            </ul>
+                        @endif
+                    @elseif ($quiz->status === 'closed')
+                        @if ($analysisSummary['status'] === 'failed')
+                            <div class="alert alert-danger small" role="alert">
+                                <i class="fas fa-exclamation-triangle mr-1"></i>{{ __('Hubo un problema generando el informe de IA.') }}
+                                @if ($analysisSummary['error_message'])
+                                    <div class="mt-1 text-monospace">{{ $analysisSummary['error_message'] }}</div>
+                                @endif
+                                <div class="mt-2 mb-0">
+                                    {{ __('Intenta regenerar el análisis con el botón superior.') }}
+                                </div>
+                            </div>
+                        @else
+                            <p class="text-muted small mb-0">
+                                <i class="fas fa-hourglass-half mr-1"></i>{{ __('Estamos recopilando resultados. Vuelve a intentarlo en unos instantes o regenera el análisis.') }}
+                            </p>
+                        @endif
+                    @else
+                        <p class="text-muted small mb-0">
+                            {{ __('Cierra la encuesta para habilitar un informe automático con IA y recibir recomendaciones personalizadas.') }}
+                        </p>
+                    @endif
                 </div>
             </div>
         </div>
@@ -182,26 +258,15 @@
 @push('scripts')
 <script>
     document.addEventListener('DOMContentLoaded', function () {
+        const questionTypeData = @json($questionTypeChart);
         const typeChartCtx = document.getElementById('questionTypeChart');
-        if (typeChartCtx) {
+        if (typeChartCtx && questionTypeData.labels.length) {
             new Chart(typeChartCtx, {
                 type: 'pie',
                 data: {
-                    labels: {!! json_encode(
-                        $quiz->questions->groupBy('type')->map(function ($questions) {
-                            $typeLabels = [
-                                'multiple_choice' => __('Opción múltiple'),
-                                'multi_select' => __('Selección múltiple'),
-                                'scale' => __('Escala'),
-                                'open_text' => __('Respuesta abierta'),
-                                'numeric' => __('Respuesta numérica'),
-                            ];
-                            $type = $questions->first()->type ?? '';
-                            return $typeLabels[$type] ?? $type;
-                        })->values()
-                    ) !!},
+                    labels: questionTypeData.labels,
                     datasets: [{
-                        data: {!! json_encode($quiz->questions->groupBy('type')->map->count()->values()) !!},
+                        data: questionTypeData.data,
                         backgroundColor: ['#4e73df', '#1cc88a', '#36b9cc', '#f6c23e', '#e74a3b'],
                         hoverBackgroundColor: ['#2e59d9', '#17a673', '#2c9faf', '#dda20a', '#be2617'],
                         borderColor: '#fff',
@@ -214,15 +279,16 @@
             });
         }
 
+        const invitationUsageData = @json($invitationUsageChart);
         const usageChartCtx = document.getElementById('invitationUsageChart');
-        if (usageChartCtx) {
+        if (usageChartCtx && invitationUsageData.labels.length) {
             new Chart(usageChartCtx, {
                 type: 'bar',
                 data: {
-                    labels: {!! json_encode($quiz->invitations->map(fn($inv) => $inv->label ?? $inv->code)) !!},
+                    labels: invitationUsageData.labels,
                     datasets: [{
                         label: '{{ __('Respuestas') }}',
-                        data: {!! json_encode($quiz->invitations->map(fn($inv) => $inv->uses_count)) !!},
+                        data: invitationUsageData.data,
                         backgroundColor: '#4e73df',
                     }],
                 },

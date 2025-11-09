@@ -2,9 +2,11 @@
 
 namespace App\Http\Controllers;
 
-use App\Http\Requests\StoreQuizRequest;
 use App\Http\Requests\UpdateQuizRequest;
+use App\Http\Requests\StoreQuizRequest;
+use App\Jobs\ProcessQuizAnalysisJob;
 use App\Models\Quiz;
+use App\Models\QuizAiAnalysis;
 use App\Models\QuizInvitation;
 use Illuminate\Contracts\View\View;
 use Illuminate\Http\RedirectResponse;
@@ -73,11 +75,24 @@ class QuizController extends Controller
     {
         $this->ensureOwnership($quiz);
 
-        $quiz->load(['questions.options', 'invitations', 'attempts.answers']);
+        $quiz->load(['questions.options', 'invitations', 'attempts.answers', 'analyses' => fn ($query) => $query->latest()]);
 
         $quiz->loadCount(['questions', 'attempts']);
 
-        return view('quizzes.show', compact('quiz'));
+        $latestAnalysis = $quiz->analyses->first();
+
+        $questionTypeChart = $this->buildQuestionTypeChart($quiz);
+        $invitationUsageChart = $this->buildInvitationUsageChart($quiz);
+
+        $analysisSummary = $this->buildAnalysisSummary($latestAnalysis);
+
+        return view('quizzes.show', [
+            'quiz' => $quiz,
+            'latestAnalysis' => $latestAnalysis,
+            'questionTypeChart' => $questionTypeChart,
+            'invitationUsageChart' => $invitationUsageChart,
+            'analysisSummary' => $analysisSummary,
+        ]);
     }
 
     public function edit(Quiz $quiz): View
@@ -145,7 +160,26 @@ class QuizController extends Controller
             'analysis_requested_at' => now(),
         ]);
 
-        return back()->with('status', __('La encuesta se cerró y se detuvo la recepción de respuestas.'));
+        ProcessQuizAnalysisJob::dispatchSync($quiz->id);
+
+        return back()->with('status', __('La encuesta se cerró y se generó un nuevo análisis con IA.'));
+    }
+
+    public function analyze(Quiz $quiz): RedirectResponse
+    {
+        $this->ensureOwnership($quiz);
+
+        if ($quiz->status !== 'closed') {
+            return back()->with('error', __('Debes cerrar la encuesta antes de generar el análisis con IA.'));
+        }
+
+        $quiz->update([
+            'analysis_requested_at' => now(),
+        ]);
+
+        ProcessQuizAnalysisJob::dispatchSync($quiz->id);
+
+        return back()->with('status', __('Se generó un nuevo informe con IA.'));
     }
 
     protected function ensureDefaultInvitation(Quiz $quiz): void
@@ -182,5 +216,119 @@ class QuizController extends Controller
             403,
             'No tienes permisos para acceder a esta encuesta.'
         );
+    }
+
+    protected function buildQuestionTypeChart(Quiz $quiz): array
+    {
+        $typeLabels = [
+            'multiple_choice' => __('Opción múltiple'),
+            'multi_select' => __('Selección múltiple'),
+            'scale' => __('Escala'),
+            'open_text' => __('Respuesta abierta'),
+            'numeric' => __('Respuesta numérica'),
+        ];
+
+        $grouped = $quiz->questions->groupBy('type');
+
+        $labels = $grouped->map(function ($questions, $type) use ($typeLabels) {
+            return $typeLabels[$type] ?? ucfirst(str_replace('_', ' ', $type));
+        })->values()->all();
+
+        $data = $grouped->map->count()->values()->all();
+
+        return compact('labels', 'data');
+    }
+
+    protected function buildInvitationUsageChart(Quiz $quiz): array
+    {
+        $labels = $quiz->invitations
+            ->map(fn (QuizInvitation $invitation) => $invitation->label ?: $invitation->code)
+            ->values()
+            ->all();
+
+        $data = $quiz->invitations
+            ->map(fn (QuizInvitation $invitation) => $invitation->uses_count)
+            ->values()
+            ->all();
+
+        return compact('labels', 'data');
+    }
+
+    protected function buildAnalysisSummary(?QuizAiAnalysis $analysis): array
+    {
+        if (! $analysis) {
+            return [
+                'status' => null,
+                'summary' => null,
+                'quantitative' => [],
+                'qualitative' => [],
+                'recommendations' => [],
+                'completed_at' => null,
+                'error_message' => null,
+            ];
+        }
+
+        return [
+            'status' => $analysis->status,
+            'summary' => $analysis->summary,
+            'quantitative' => $this->normalizeQuantitative($analysis->quantitative_insights),
+            'qualitative' => $this->normalizeQualitative($analysis->qualitative_themes),
+            'recommendations' => $this->normalizeRecommendations($analysis->recommendations),
+            'completed_at' => $analysis->completed_at,
+            'error_message' => $analysis->error_message,
+        ];
+    }
+
+    protected function normalizeQuantitative(mixed $value): array
+    {
+        if (! is_array($value)) {
+            return [];
+        }
+
+        return collect($value)
+            ->filter(fn ($item) => is_array($item) && isset($item['question']))
+            ->map(function (array $item) {
+                $item['key_findings'] = array_values(array_filter(
+                    array_map('trim', (array) ($item['key_findings'] ?? []))
+                ));
+
+                return $item;
+            })
+            ->values()
+            ->all();
+    }
+
+    protected function normalizeQualitative(mixed $value): array
+    {
+        if (! is_array($value)) {
+            return [];
+        }
+
+        return collect($value)
+            ->filter(fn ($item) => is_array($item) && isset($item['theme']))
+            ->map(function (array $item) {
+                $item['evidence'] = array_values(array_filter(
+                    array_map('trim', (array) ($item['evidence'] ?? []))
+                ));
+
+                return $item;
+            })
+            ->values()
+            ->all();
+    }
+
+    protected function normalizeRecommendations(mixed $value): array
+    {
+        if (is_string($value)) {
+            $lines = preg_split('/[\r\n]+/', $value) ?: [];
+
+            return array_values(array_filter(array_map('trim', $lines)));
+        }
+
+        if (is_array($value)) {
+            return array_values(array_filter(array_map('trim', $value)));
+        }
+
+        return [];
     }
 }

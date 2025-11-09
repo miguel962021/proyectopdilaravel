@@ -24,6 +24,7 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::resource('quizzes', QuizController::class);
     Route::post('quizzes/{quiz}/publish', [QuizController::class, 'publish'])->name('quizzes.publish');
     Route::post('quizzes/{quiz}/close', [QuizController::class, 'close'])->name('quizzes.close');
+    Route::post('quizzes/{quiz}/analysis', [QuizController::class, 'analyze'])->name('quizzes.analyze');
     Route::resource('quizzes.questions', QuestionController::class)->except(['index', 'show']);
     Route::resource('quizzes.invitations', QuizInvitationController::class)->only(['store', 'update', 'destroy']);
 });
