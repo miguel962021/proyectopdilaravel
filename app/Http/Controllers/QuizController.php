@@ -8,6 +8,8 @@ use App\Jobs\ProcessQuizAnalysisJob;
 use App\Models\Quiz;
 use App\Models\QuizAiAnalysis;
 use App\Models\QuizInvitation;
+use App\Services\QuizAnalyticsService;
+use Barryvdh\DomPDF\Facade\Pdf;
 use Illuminate\Contracts\View\View;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Support\Facades\Auth;
@@ -180,6 +182,64 @@ class QuizController extends Controller
         ProcessQuizAnalysisJob::dispatchSync($quiz->id);
 
         return back()->with('status', __('Se generó un nuevo informe con IA.'));
+    }
+
+    public function analysis(Quiz $quiz, QuizAnalyticsService $analyticsService): View
+    {
+        $this->ensureOwnership($quiz);
+
+        $quiz->load(['questions.options', 'attempts.answers', 'analyses' => fn ($query) => $query->latest()]);
+
+        $analysisRecord = $quiz->analyses->first();
+        $analysisSummary = $analysisRecord ? $this->buildAnalysisSummary($analysisRecord) : [
+            'summary' => null,
+            'completed_at' => null,
+            'recommendations' => [],
+            'qualitative' => [],
+        ];
+
+        $quantitativeInsights = $analyticsService->buildQuantitativeInsights($quiz);
+        $qualitativeInsights = $analyticsService->buildQualitativeInsights($quiz);
+        $chartConfigs = $analyticsService->buildChartConfigsFromInsights($quantitativeInsights);
+
+        return view('quizzes.analysis', [
+            'quiz' => $quiz,
+            'analysis' => $analysisRecord,
+            'analysisSummary' => $analysisSummary,
+            'quantitativeInsights' => $quantitativeInsights,
+            'qualitativeInsights' => $qualitativeInsights,
+            'chartConfigs' => $chartConfigs,
+        ]);
+    }
+
+    public function exportAnalysis(Quiz $quiz, QuizAnalyticsService $analyticsService)
+    {
+        $this->ensureOwnership($quiz);
+
+        $quiz->load(['questions.options', 'attempts.answers', 'analyses' => fn ($query) => $query->latest()]);
+        $analysisRecord = $quiz->analyses->first();
+
+        if (! $analysisRecord) {
+            return redirect()
+                ->route('quizzes.analysis.show', $quiz)
+                ->with('error', __('Aún no se ha generado un informe para esta encuesta.'));
+        }
+
+        $analysisSummary = $this->buildAnalysisSummary($analysisRecord);
+        $quantitativeInsights = $analyticsService->buildQuantitativeInsights($quiz);
+        $qualitativeInsights = $analyticsService->buildQualitativeInsights($quiz);
+
+        $pdf = Pdf::loadView('quizzes.analysis-pdf', [
+            'quiz' => $quiz,
+            'analysis' => $analysisRecord,
+            'analysisSummary' => $analysisSummary,
+            'quantitativeInsights' => $quantitativeInsights,
+            'qualitativeInsights' => $qualitativeInsights,
+        ])->setPaper('a4');
+
+        $filename = 'informe-' . Str::slug($quiz->title ?? 'encuesta') . '-' . now()->format('Ymd_His') . '.pdf';
+
+        return $pdf->download($filename);
     }
 
     protected function ensureDefaultInvitation(Quiz $quiz): void

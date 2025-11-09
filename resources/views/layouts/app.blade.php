@@ -58,12 +58,12 @@
                         <span>Encuestas</span></a>
                 </li>
                 <li class="nav-item">
-                    <a class="nav-link" href="#">
+                    <a class="nav-link" href="{{ route('quizzes.index') }}#invitations">
                         <i class="fas fa-fw fa-key"></i>
                         <span>Códigos de Invitación</span></a>
                 </li>
                 <li class="nav-item">
-                    <a class="nav-link" href="#">
+                    <a class="nav-link" href="{{ route('quizzes.index') }}#analysis">
                         <i class="fas fa-fw fa-brain"></i>
                         <span>Análisis IA</span></a>
                 </li>
@@ -73,12 +73,12 @@
                         <i class="fas fa-fw fa-chart-area"></i>
                         <span>Reportes</span>
                     </a>
-                    <div id="collapseReports" class="collapse" aria-labelledby="headingReports" data-parent="#accordionSidebar">
+                    <div id="collapseReports" class="collapse {{ request()->routeIs('reports.*') ? 'show' : '' }}" aria-labelledby="headingReports" data-parent="#accordionSidebar">
                         <div class="bg-white py-2 collapse-inner rounded">
                             <h6 class="collapse-header">Reportes:</h6>
-                            <a class="collapse-item" href="#">Resumen</a>
-                            <a class="collapse-item" href="#">Estudiantes</a>
-                            <a class="collapse-item" href="#">Encuestas</a>
+                            <a class="collapse-item {{ request()->routeIs('reports.summary') ? 'active' : '' }}" href="{{ route('reports.summary') }}">Resumen</a>
+                            <a class="collapse-item {{ request()->routeIs('reports.students') ? 'active' : '' }}" href="{{ route('reports.students') }}">Estudiantes</a>
+                            <a class="collapse-item {{ request()->routeIs('reports.surveys') ? 'active' : '' }}" href="{{ route('reports.surveys') }}">Encuestas</a>
                         </div>
                     </div>
                 </li>
@@ -229,10 +229,34 @@
         <i class="fas fa-angle-up"></i>
     </a>
 
+    <div class="modal fade" id="globalLoaderModal" tabindex="-1" role="dialog" aria-hidden="true" data-backdrop="static" data-keyboard="false">
+        <div class="modal-dialog modal-sm modal-dialog-centered" role="document">
+            <div class="modal-content border-0 shadow-lg">
+                <div class="modal-body text-center py-5">
+                    <div class="spinner-border text-primary mb-3" role="status">
+                        <span class="sr-only">{{ __('Cargando...') }}</span>
+                    </div>
+                    <p class="mb-0 text-muted">{{ __('Procesando, por favor espera...') }}</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <script src="{{ asset('vendor/jquery/jquery.min.js') }}"></script>
     <script src="{{ asset('vendor/bootstrap/js/bootstrap.bundle.min.js') }}"></script>
     <script src="{{ asset('vendor/jquery-easing/jquery.easing.min.js') }}"></script>
     <script src="{{ asset('js/sb-admin-2.min.js') }}"></script>
+    <script>
+        (function ($) {
+            $(document).on('submit', 'form.js-show-loader', function () {
+                $('#globalLoaderModal').modal('show');
+            });
+
+            $(document).on('click', '.js-show-loader', function () {
+                $('#globalLoaderModal').modal('show');
+            });
+        })(jQuery);
+    </script>
     @stack('scripts-before-chart')
     <script src="{{ asset('vendor/chart.js/Chart.min.js') }}"></script>
     @stack('scripts')

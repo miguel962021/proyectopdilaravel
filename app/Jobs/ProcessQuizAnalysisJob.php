@@ -2,18 +2,16 @@
 
 namespace App\Jobs;
 
-use App\Models\Question;
 use App\Models\Quiz;
 use App\Models\QuizAiAnalysis;
-use App\Models\QuizAnswer;
 use App\Services\OpenAIService;
+use App\Services\QuizAnalyticsService;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Bus\Dispatchable;
 use Illuminate\Queue\InteractsWithQueue;
 use Illuminate\Queue\SerializesModels;
 use Illuminate\Support\Arr;
-use Illuminate\Support\Collection;
 use Throwable;
 
 class ProcessQuizAnalysisJob implements ShouldQueue
@@ -28,7 +26,7 @@ class ProcessQuizAnalysisJob implements ShouldQueue
     ) {
     }
 
-    public function handle(OpenAIService $openAI): void
+    public function handle(OpenAIService $openAI, QuizAnalyticsService $analyticsService): void
     {
         /** @var Quiz|null $quiz */
         $quiz = Quiz::with(['questions.options', 'attempts.answers'])
@@ -48,8 +46,8 @@ class ProcessQuizAnalysisJob implements ShouldQueue
         ]);
 
         try {
-            $quantitative = $this->buildQuantitativeInsights($quiz);
-            $qualitative = $this->buildQualitativeSamples($quiz);
+            $quantitative = $analyticsService->buildQuantitativeInsights($quiz);
+            $qualitative = $analyticsService->buildQualitativeInsights($quiz);
             $meta = $this->buildSurveyMeta($quiz, $quantitative);
 
             $promptPayload = [
@@ -99,69 +97,6 @@ class ProcessQuizAnalysisJob implements ShouldQueue
                 'raw_response' => null,
             ]);
         }
-    }
-
-    /**
-     * @return array<int, array<string, mixed>>
-     */
-    protected function buildQuantitativeInsights(Quiz $quiz): array
-    {
-        $results = [];
-
-        foreach ($quiz->questions as $question) {
-            $answers = QuizAnswer::query()
-                ->where('question_id', $question->id)
-                ->get();
-
-            if ($answers->isEmpty()) {
-                continue;
-            }
-
-            $results[] = match ($question->type) {
-                'multiple_choice' => $this->summarizeMultipleChoice($question, $answers),
-                'multi_select' => $this->summarizeMultiSelect($question, $answers),
-                'scale', 'numeric' => $this->summarizeNumeric($question, $answers),
-                default => $this->summarizeGeneric($question, $answers),
-            };
-        }
-
-        return $results;
-    }
-
-    /**
-     * @return array<int, array<string, mixed>>
-     */
-    protected function buildQualitativeSamples(Quiz $quiz): array
-    {
-        $samples = [];
-
-        foreach ($quiz->questions as $question) {
-            if ($question->type !== 'open_text') {
-                continue;
-            }
-
-            $responses = QuizAnswer::query()
-                ->where('question_id', $question->id)
-                ->whereNotNull('answer_text')
-                ->whereRaw("TRIM(answer_text) <> ''")
-                ->orderByDesc('created_at')
-                ->limit(25)
-                ->pluck('answer_text')
-                ->map(fn ($value) => mb_substr($value, 0, 500))
-                ->values();
-
-            if ($responses->isEmpty()) {
-                continue;
-            }
-
-            $samples[] = [
-                'question_id' => $question->id,
-                'question' => $question->title,
-                'responses' => $responses->all(),
-            ];
-        }
-
-        return $samples;
     }
 
     /**
@@ -216,128 +151,5 @@ Usa un tono profesional y positivo. Si falta información para una sección, dev
 PROMPT;
 
         return $instructions.PHP_EOL.PHP_EOL.json_encode($payload, JSON_THROW_ON_ERROR | JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE);
-    }
-
-    /**
-     * @return array<string, mixed>
-     */
-    protected function summarizeMultipleChoice(Question $question, Collection $answers): array
-    {
-        $total = $answers->count();
-
-        $optionCounts = $answers
-            ->groupBy('question_option_id')
-            ->map(fn (Collection $items) => $items->count());
-
-        $options = $question->options->map(function ($option) use ($optionCounts, $total) {
-            $count = $optionCounts->get($option->id, 0);
-
-            return [
-                'option_id' => $option->id,
-                'label' => $option->label,
-                'count' => $count,
-                'percentage' => $total > 0 ? round(($count / $total) * 100, 2) : 0,
-            ];
-        })->all();
-
-        return [
-            'question_id' => $question->id,
-            'question' => $question->title,
-            'type' => $question->type,
-            'total_responses' => $total,
-            'options' => $options,
-        ];
-    }
-
-    /**
-     * @return array<string, mixed>
-     */
-    protected function summarizeMultiSelect(Question $question, Collection $answers): array
-    {
-        $optionCounts = $answers
-            ->groupBy('question_option_id')
-            ->map(fn (Collection $items) => $items->count());
-
-        $options = $question->options->map(function ($option) use ($optionCounts) {
-            $count = $optionCounts->get($option->id, 0);
-
-            return [
-                'option_id' => $option->id,
-                'label' => $option->label,
-                'count' => $count,
-            ];
-        })->all();
-
-        $distinctRespondents = $answers
-            ->pluck('attempt_id')
-            ->filter()
-            ->unique()
-            ->count();
-
-        return [
-            'question_id' => $question->id,
-            'question' => $question->title,
-            'type' => $question->type,
-            'total_responses' => $distinctRespondents,
-            'options' => $options,
-        ];
-    }
-
-    /**
-     * @return array<string, mixed>
-     */
-    protected function summarizeNumeric(Question $question, Collection $answers): array
-    {
-        $values = $answers
-            ->pluck('answer_number')
-            ->filter(function ($value) {
-                return $value !== null;
-            })
-            ->map(fn ($value) => (float) $value)
-            ->values();
-
-        if ($values->isEmpty()) {
-            return $this->summarizeGeneric($question, $answers);
-        }
-
-        $average = round($values->avg(), 2);
-        $min = $values->min();
-        $max = $values->max();
-
-        $distribution = $values
-            ->groupBy(fn ($value) => (string) $value)
-            ->map(fn (Collection $items, $key) => [
-                'value' => (float) $key,
-                'count' => $items->count(),
-                'percentage' => $values->count() > 0
-                    ? round(($items->count() / $values->count()) * 100, 2)
-                    : 0,
-            ])
-            ->values()
-            ->all();
-
-        return [
-            'question_id' => $question->id,
-            'question' => $question->title,
-            'type' => $question->type,
-            'total_responses' => $values->count(),
-            'average' => $average,
-            'minimum' => $min,
-            'maximum' => $max,
-            'distribution' => $distribution,
-        ];
-    }
-
-    /**
-     * @return array<string, mixed>
-     */
-    protected function summarizeGeneric(Question $question, Collection $answers): array
-    {
-        return [
-            'question_id' => $question->id,
-            'question' => $question->title,
-            'type' => $question->type,
-            'total_responses' => $answers->count(),
-        ];
     }
 }

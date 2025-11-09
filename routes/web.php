@@ -5,6 +5,7 @@ use App\Http\Controllers\ProfileController;
 use App\Http\Controllers\QuestionController;
 use App\Http\Controllers\QuizController;
 use App\Http\Controllers\QuizInvitationController;
+use App\Http\Controllers\ReportsController;
 use App\Http\Controllers\SurveyAccessController;
 use App\Http\Controllers\SurveyResponseController;
 use Illuminate\Support\Facades\Auth;
@@ -25,8 +26,16 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::post('quizzes/{quiz}/publish', [QuizController::class, 'publish'])->name('quizzes.publish');
     Route::post('quizzes/{quiz}/close', [QuizController::class, 'close'])->name('quizzes.close');
     Route::post('quizzes/{quiz}/analysis', [QuizController::class, 'analyze'])->name('quizzes.analyze');
+    Route::get('quizzes/{quiz}/analysis', [QuizController::class, 'analysis'])->name('quizzes.analysis.show');
+    Route::get('quizzes/{quiz}/analysis/export', [QuizController::class, 'exportAnalysis'])->name('quizzes.analysis.export');
     Route::resource('quizzes.questions', QuestionController::class)->except(['index', 'show']);
     Route::resource('quizzes.invitations', QuizInvitationController::class)->only(['store', 'update', 'destroy']);
+
+    Route::prefix('reports')->name('reports.')->group(function () {
+        Route::get('summary', [ReportsController::class, 'summary'])->name('summary');
+        Route::get('students', [ReportsController::class, 'students'])->name('students');
+        Route::get('surveys', [ReportsController::class, 'surveys'])->name('surveys');
+    });
 });
 
 Route::middleware('auth')->group(function () {

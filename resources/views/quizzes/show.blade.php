@@ -97,13 +97,16 @@
                         <i class="fas fa-edit mr-1"></i>{{ __('Editar encuesta') }}
                     </a>
                     @if ($quiz->status === 'closed')
-                        <form method="POST" action="{{ route('quizzes.analyze', $quiz) }}" class="mb-2">
+                        <form method="POST" action="{{ route('quizzes.analyze', $quiz) }}" class="mb-2 js-show-loader">
                             @csrf
                             <button type="submit" class="btn btn-success btn-block">
                                 <i class="fas fa-robot mr-1"></i>{{ __('Regenerar análisis con IA') }}
                             </button>
                         </form>
                     @endif
+                    <a href="{{ route('quizzes.analysis.show', $quiz) }}" class="btn btn-outline-info btn-block mb-2">
+                        <i class="fas fa-chart-area mr-1"></i>{{ __('Ver informe detallado') }}
+                    </a>
                     <a href="{{ route('quizzes.index') }}" class="btn btn-outline-secondary btn-block">
                         <i class="fas fa-arrow-left mr-1"></i>{{ __('Volver al listado') }}
                     </a>

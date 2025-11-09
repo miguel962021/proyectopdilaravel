@@ -23,14 +23,14 @@
                         </div>
                         <div class="btn-group">
                             @if ($quiz->status === 'draft')
-                                <form action="{{ route('quizzes.publish', $quiz) }}" method="POST">
+                                <form action="{{ route('quizzes.publish', $quiz) }}" method="POST" class="js-show-loader">
                                     @csrf
                                     <button type="submit" class="btn btn-sm btn-success">
                                         <i class="fas fa-bullhorn mr-1"></i>{{ __('Publicar encuesta') }}
                                     </button>
                                 </form>
                             @elseif ($quiz->status === 'published')
-                                <form action="{{ route('quizzes.close', $quiz) }}" method="POST" onsubmit="return confirm('{{ __('¿Cerrar la encuesta? Los estudiantes ya no podrán responder.') }}')">
+                                <form action="{{ route('quizzes.close', $quiz) }}" method="POST" class="js-show-loader" onsubmit="return confirm('{{ __('¿Cerrar la encuesta? Los estudiantes ya no podrán responder.') }}')">
                                     @csrf
                                     <button type="submit" class="btn btn-sm btn-warning">
                                         <i class="fas fa-lock mr-1"></i>{{ __('Cerrar encuesta') }}
